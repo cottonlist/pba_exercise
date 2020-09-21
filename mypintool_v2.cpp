@@ -9,6 +9,17 @@ using std::string;
 
 KNOB<string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "memory_access_2.log", "specify output file name");
 
+class access {
+public:
+	int threadId;
+	void *ip;
+	int mode;
+	void *addr;
+};
+
+static access accesses[2000];
+static int i=0;
+
 //==============================================================
 //  Analysis Routines
 //==============================================================
@@ -36,6 +47,12 @@ VOID RecordMemRead(VOID *ip, VOID *addr, THREADID threadid){
 	PIN_GetLock(&pinLock, threadid+1);
 	if (threadid == 1 || threadid == 2)
 	{
+		accesses[i].threadId = threadid;
+		accesses[i].ip = ip;
+		accesses[i].mode = 1;
+		accesses[i].addr = addr;
+		printf("%d, %p, %d, %p\n", accesses[i].threadId, accesses[i].ip, accesses[i].mode, accesses[i].addr);
+		i++;
 		fprintf(out, "thread id %d, %p: memory read, address %p\n", threadid, ip, addr);
 		fflush(out);
 	}
@@ -67,14 +84,14 @@ VOID Instruction(INS ins, VOID *v){
 			INS_InsertPredicatedCall(
 				ins, IPOINT_BEFORE, (AFUNPTR)RecordMemRead, 
 				IARG_INST_PTR, IARG_MEMORYOP_EA, 
-				IARG_THREAD_ID, memOp, IARG_END);
+				memOp, IARG_THREAD_ID, IARG_END);
 		}
 		if (INS_MemoryOperandIsWritten(ins, memOp))
 		{
 			INS_InsertPredicatedCall(
 				ins, IPOINT_BEFORE, (AFUNPTR)RecordMemWrite, 
 				IARG_INST_PTR, IARG_MEMORYOP_EA, 
-				IARG_THREAD_ID, memOp, IARG_END);
+				memOp, IARG_THREAD_ID, IARG_END);
 		}
 	}
 }
@@ -99,7 +116,7 @@ INT32 Usage(){
 // =====================================================================
 
 int main(int argc, char *argv[])
-{
+{	
 	// Initialize the pin lock
     PIN_InitLock(&pinLock);
 
@@ -109,7 +126,7 @@ int main(int argc, char *argv[])
     }
     PIN_InitSymbols();
 
-	out = fopen("memory_access_2.out", "w");
+	out = fopen("memory_access_2.log", "w");
 
     // Register Analysis routines to be called when a thread begins/ends
 	PIN_AddThreadStartFunction(ThreadStart, 0);
@@ -121,5 +138,8 @@ int main(int argc, char *argv[])
 	PIN_AddFiniFunction(Fini, 0);
 	
 	PIN_StartProgram();
+
+	
+
 	return 0;
 }
